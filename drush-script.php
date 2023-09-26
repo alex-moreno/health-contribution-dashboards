@@ -13,15 +13,23 @@
  * TODO: find age of the users in Drupal, and mark them as novices, advanced, etc.
  * TODO: Loop over active users to find their age in the community. Is it a healthy number?
  * 
+ * nohup sudo php scripts/drush-script.php --verbose yes --status 13  --filename /home/alexmoreno/needs-work2.csv
+ * 
  */
 
 /**
  * Root directory of Drupal installation.
  * 
-
  */
-define('DRUPAL_ROOT', getcwd());
+// From current folder.
+//define('DRUPAL_ROOT', getcwd());
+// Prod.
+//define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
+define('DRUPAL_ROOT', "/var/www/dev/alexmor-drupal.dev.devdrupal.org/htdocs/");
+
 define('SMALL_FILE', 1000);
+chdir(DRUPAL_ROOT);
+echo "folder: " . DRUPAL_ROOT;
 
 // Fetch command line options.
 $short_options = "hl::f::st:lm:vb";
@@ -139,14 +147,10 @@ foreach($results as $result) {
 
             /*
             echo "Patch found.";
-            echo PHP_EOL . " ISSUE :: " . $result->title;
-            echo PHP_EOL . " nid :: " . $result->nid;
-            echo PHP_EOL . "this file:: " . $file['filename'];
             echo PHP_EOL . "fid:: " . $file['fid'];
             echo PHP_EOL . "uri:: " . $file['uri'];
-            echo PHP_EOL . "filesize:: " . $file['filesize'];
             */
-            
+
             // If we find a patch, we store its size.
             $filesize = $file['filesize'];
           }
@@ -169,10 +173,14 @@ foreach($results as $result) {
 
 }
 
+
 $csvfile = "issues.csv";
 if ($fileoutput != "") {
   $csvfile = $fileoutput;  
 }
+
+echo "Saving into file: " . $fileoutput;
+
 $fp = fopen($csvfile, 'w');
 foreach ($issues as $issue) {
     fputcsv($fp, $issue);
@@ -197,7 +205,7 @@ function print_help_message() {
   echo PHP_EOL . " - Needs review: 8";
   echo PHP_EOL . " - Needs work: 13";
   echo PHP_EOL . " - RTBC: 14";
-  echo PHP_EOL . " - RTBC: active";
+  echo PHP_EOL . " - All active issues: active";
   echo PHP_EOL;
   echo PHP_EOL . " - Example:";
   echo PHP_EOL . " php alex-scripts/drush-script.php  --status 14";
