@@ -27,10 +27,11 @@ define('SMALL_FILE', 1000);
 $short_options = "hl::f::st:lm:vb";
 $long_options = ["help", "filename:", "status:", "limit:", "verbose:"];
 $options = getopt($short_options, $long_options);
+$verbose = FALSE;
 
+$fileoutput = "";
 if(isset($options["f"]) || isset($options["filename"])) {
-  $filename = isset($options["f"]) ? $options["f"] : $options["filename"];
-  echo "filename: " . $filename;
+  $fileoutput = isset($options["f"]) ? $options["f"] : $options["filename"];
 }
 
 if(isset($options["lm"]) || isset($options["limit"])) {
@@ -39,7 +40,7 @@ if(isset($options["lm"]) || isset($options["limit"])) {
 
 if(isset($options["vb"]) || isset($options["verbose"])) {
   $verbose = TRUE;
-  echo "being noisy.";
+  echo "Verbose enabled, being noisy.";
 }
 
 if(isset($options["hl"]) || isset($options["help"])) {
@@ -60,9 +61,11 @@ if(isset($options["st"]) || isset($options["status"])) {
     $status = [3,5,6,17,18];
   }
 
-  echo PHP_EOL;
-  echo "setting up status: ";
-  print_r($status);
+  if ($verbose) {
+    echo PHP_EOL;
+    echo "setting up status: ";
+    print_r($status);  
+  }
 
 }
 
@@ -80,15 +83,18 @@ drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
 $query = db_select('node', 'n');
 // Temporarily limit number of queries if needed for debugging.
 if ($limit) {
-  echo PHP_EOL . "NOTE: limited to $limit queries by cli." . PHP_EOL . PHP_EOL;
+  echo PHP_EOL . "NOTE: limiting to $limit queries by cli." . PHP_EOL . PHP_EOL;
   $query->range(0, $limit);
 }
 
 $query->join('field_data_field_issue_status','fis','n.nid = fis.entity_id');
+$query->join('field_data_field_project','fdp','n.nid = fdp.entity_id');
+
 
 $results = $query
   ->fields('n', array('nid', 'title', 'created', 'changed'))
   ->fields('fis', array('field_issue_status_value'))
+  ->fields('fdp', array('field_project_target_id'))
   ->condition('status', 1)
   // RTBC
   ->condition('field_issue_status_value', $status)
@@ -106,7 +112,8 @@ foreach($results as $result) {
 
   $node = node_load($result->nid);
   if ($verbose) {
-    echo "NID :: " . $result->nid . " title :: " . $result->title . PHP_EOL;
+    echo "NID :: " . $result->nid . " title :: " . $result->title . " status :: " 
+    . $result->field_issue_status_value . " project ID :: " . $result->field_project_target_id . PHP_EOL;
   }
 
 	$comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
@@ -146,7 +153,9 @@ foreach($results as $result) {
 
           if($file['filesize'] < SMALL_FILE) {
             // Not doing anything with this for now.
-            echo PHP_EOL . "Small patch found.";
+            if ($verbose) {
+              echo "NOTE: Small patch found." . PHP_EOL;
+            }
           }
         } 
       }
@@ -160,7 +169,11 @@ foreach($results as $result) {
 
 }
 
-$fp = fopen('issues.csv', 'w');
+$csvfile = "issues.csv";
+if ($fileoutput != "") {
+  $csvfile = $fileoutput;  
+}
+$fp = fopen($csvfile, 'w');
 foreach ($issues as $issue) {
     fputcsv($fp, $issue);
 }
