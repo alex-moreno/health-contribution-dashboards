@@ -27,7 +27,6 @@
 // Stage.
 define('DRUPAL_ROOT', "/var/www/dev/alexmor-drupal.dev.devdrupal.org/htdocs/");
 chdir(DRUPAL_ROOT);
-echo "folder: " . DRUPAL_ROOT . PHP_EOL;
 
 define('SMALL_FILE', 1000);
 
@@ -53,10 +52,18 @@ if(isset($options["vb"]) || isset($options["verbose"])) {
 
 if(isset($options["ds"]) || isset($options["datestart"])) {
   $datestart = $options["datestart"];
+
+  if($verbose) {
+    echo PHP_EOL . "DateStart:: " . $datestart;
+  }
 }
 
 if(isset($options["de"]) || isset($options["dateend"])) {
-  $datestart = $options["dateend"];
+  $dateend = $options["dateend"];
+
+  if($verbose) {
+    echo PHP_EOL . "DateEnd:: " . $dateend;
+  }
 }
 
 if(isset($options["hl"]) || isset($options["help"])) {
@@ -79,7 +86,7 @@ if(isset($options["st"]) || isset($options["status"])) {
 
   if ($verbose) {
     echo PHP_EOL;
-    echo "setting up status: ";
+    echo "Setting up status: ";
     print_r($status);  
   }
 
@@ -89,7 +96,6 @@ if(isset($options["st"]) || isset($options["status"])) {
     if($env == "stage") {
       define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
       chdir(DRUPAL_ROOT);
-      echo "Active folder: " . DRUPAL_ROOT . PHP_EOL;
     }
   }
 }
@@ -121,90 +127,106 @@ if ($verbose) {
   echo "Executing query: ";
 }
 
+// TODO: Add date ranges.
 $results = $query
   ->fields('n', array('nid', 'title', 'created', 'changed'))
   ->fields('fis', array('field_issue_status_value'))
   ->fields('fdp', array('field_project_target_id'))
   ->condition('status', 1)
-  // RTBC
   ->condition('field_issue_status_value', $status)
+  ->orderBy('created', 'DESC');
 
-  ->orderBy('created', 'DESC')
-  ->execute();
+  // Date: 2020-02
+  $parsed_date_start = date_parse_from_format('Y-m', $datestart);
+  $parsed_date_end = date_parse_from_format('Y-m', $dateend);
+  // ->condition('created', $created, $updated, 'BETWEEN')
+  // ->condition('created', [$first_minute_of_month, $last_minute_of_month], 'BETWEEN')
 
+  if(isset($datestart) && isset($dateend)) {
 
-// Prepare to write the csv.
-$csvfile = "issues.csv";
-if ($fileoutput != "") {
-  $csvfile = $fileoutput;  
-}
-$fp = fopen($csvfile, 'w');
+    //$mydate = date('U', mktime(0, 0, 0, 1, 2, 2022));
+    $my_start_date = date('U', mktime(0, 0, 0, "1", "1", $datestart));
+    $my_end_date = date('U', mktime(0, 0, 0, "12", "1", $dateend));
 
-$issues = Array();
-array_push($issues, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size'));
-fputcsv($fp, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size'));
-
-$interval = 0;
-
-// Ready to iterate.
-foreach($results as $result) {
-	$created = date('F j, Y, g:i a', $result->created);
-	$changed = date('F j, Y, g:i a', $result->changed);
-  $interval = diffDates($created, $changed);
-
-  $node = node_load($result->nid);
-  if ($verbose) {
-    echo "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: " 
-    . $result->field_issue_status_value . " project ID :: " . $result->field_project_target_id . PHP_EOL;
+    $query->condition('created', $my_start_date, '>=');
+    $query->condition('created', $my_end_date, '<=');
   }
 
-	$comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
+  // Get the queries.
+  $results = $query->execute();
 
-  $filesize = 0;
-  $numAuthors = array();;
-	foreach($comments as $comment) {
-		$currentComment = comment_load($comment);
+  // Prepare to write the csv.
+  $csvfile = "issues.csv";
+  if ($fileoutput != "") {
+    $csvfile = $fileoutput;  
+  }
+  $fp = fopen($csvfile, 'w');
 
-    // Get current Author.
-    $numAuthors[$currentComment->name] = $currentComment->name;
+  $issues = Array();
+  //array_push($issues, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size'));
+  fputcsv($fp, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size'));
 
-		// TODO: Get number of authors per issue. if author is not in array, add a new one
-    // if patch does not exist, but there is a Gitlab MR, check if there is an API.
-    // CHECK THE DIFF: https://git.drupalcode.org/project/entity_jump_menu/-/merge_requests/2.diff
-    foreach($currentComment->field_issue_changes['und'] as $field_file) {
-      foreach($field_file['new_value'] as $file) {
-        if (!empty($file['filename'])) {
+  $interval = 0;
 
-          // If we find a patch.
-          if (strpos($file['filename'], '.patch')!== false) {
-            if ($verbose) {
-              echo "Patch found.";
-              echo PHP_EOL . "fid:: " . $file['fid'];
-              echo PHP_EOL . "uri:: " . $file['uri'] . PHP_EOL;
-            }
+  // Ready to iterate.
+  foreach($results as $result) {
+    $created = date('F j, Y, g:i a', $result->created);
+    $changed = date('F j, Y, g:i a', $result->changed);
+    $interval = diffDates($created, $changed);
 
-            // If we find a patch, we store its size.
-            $filesize = $file['filesize'];
-          }
-
-          if($file['filesize'] < SMALL_FILE) {
-            // Not doing anything with this for now.
-            if ($verbose) {
-              echo "NOTE: Small patch found." . PHP_EOL;
-            }
-          }
-        } 
-      }
-
+    $node = node_load($result->nid);
+    if ($verbose) {
+      echo "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: " 
+      . $result->field_issue_status_value . " project ID :: " . $result->field_project_target_id 
+      . " CREATED: " . date("d m Y",$result->created) . PHP_EOL;
     }
+
+    $comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
+
+    $filesize = 0;
+    $numAuthors = array();;
+    foreach($comments as $comment) {
+      $currentComment = comment_load($comment);
+
+      // Get current Author.
+      $numAuthors[$currentComment->name] = $currentComment->name;
+
+      // TODO: Get number of authors per issue. if author is not in array, add a new one
+      // if patch does not exist, but there is a Gitlab MR, check if there is an API.
+      // CHECK THE DIFF: https://git.drupalcode.org/project/entity_jump_menu/-/merge_requests/2.diff
+      foreach($currentComment->field_issue_changes['und'] as $field_file) {
+        foreach($field_file['new_value'] as $file) {
+          if (!empty($file['filename'])) {
+
+            // If we find a patch.
+            if (strpos($file['filename'], '.patch')!== false) {
+              if ($verbose) {
+                echo "Patch found.";
+                echo PHP_EOL . "fid:: " . $file['fid'];
+                echo PHP_EOL . "uri:: " . $file['uri'] . PHP_EOL;
+              }
+
+              // If we find a patch, we store its size.
+              $filesize = $file['filesize'];
+            }
+
+            if($file['filesize'] < SMALL_FILE) {
+              // Not doing anything with this for now.
+              if ($verbose) {
+                echo "NOTE: Small patch found." . PHP_EOL;
+              }
+            }
+          } 
+        }
+
+      }
 
 	}
 
   // Move to array.
   $output = Array($result->nid,$result->title, $created, $changed, $interval, 
   count($comments), $result->field_issue_status_value, sizeof($numAuthors), $filesize);
-  //array_push($issues, $output);
-  // Move here writing to the csv.
+  // Writing to the csv.
   fputcsv($fp, $output);
 }
 
@@ -235,10 +257,12 @@ function print_help_message() {
   echo PHP_EOL . " - Needs work: 13";
   echo PHP_EOL . " - RTBC: 14";
   echo PHP_EOL . " - All active issues: active";
+  echo PHP_EOL . " -- DateStart";
   echo PHP_EOL;
-  echo PHP_EOL . " - Example:";
+  echo PHP_EOL . " - Examples:";
   echo PHP_EOL . " php scripts/drush-script.php  --status 14";
   echo PHP_EOL . " php scripts/drush-script.php  --status active";
+  echo PHP_EOL . " php scripts/drush-script.php  --status active --datestart 2018";
 
   echo PHP_EOL . PHP_EOL . "--environment: stage";
 
