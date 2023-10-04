@@ -22,17 +22,17 @@
  * 
  */
 // From current folder.
-// Prod.
-//define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
 // Stage.
+//define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
+// Dev.
 define('DRUPAL_ROOT', "/var/www/dev/alexmor-drupal.dev.devdrupal.org/htdocs/");
 chdir(DRUPAL_ROOT);
 
 define('SMALL_FILE', 1000);
 
 // Fetch command line options.
-$short_options = "hl::f::st:lm:vb:env:ds:de";
-$long_options = ["help", "filename:", "status:", "limit:", "verbose:", "env:", "datestart:", "dateend:"];
+$short_options = "hl::f::st:lm:vb:env:ds:de:dc";
+$long_options = ["help", "filename:", "status:", "limit:", "verbose:", "env:", "datestart:", "dateend:", "datechanged:"];
 $options = getopt($short_options, $long_options);
 $verbose = FALSE;
 
@@ -66,6 +66,14 @@ if(isset($options["de"]) || isset($options["dateend"])) {
   }
 }
 
+if(isset($options["dc"]) || isset($options["datechanged"])) {
+  $datechanged = $options["datechanged"];
+
+  if($verbose) {
+    echo PHP_EOL . "Date Changed:: " . $datechanged;
+  }
+}
+
 if(isset($options["hl"]) || isset($options["help"])) {
   $help = isset($options["hl"]) ? $options["help"] : $options["help"];
 
@@ -76,7 +84,6 @@ if(isset($options["hl"]) || isset($options["help"])) {
 
 if(isset($options["st"]) || isset($options["status"])) {
   $status = isset($options["st"]) ? $options["st"] : $options["status"];
-
 
   // All active issues
   //->condition('field_issue_status_value', [3,5,6,17,18], 'NOT IN')
@@ -136,20 +143,21 @@ $results = $query
   ->condition('field_issue_status_value', $status)
   ->orderBy('created', 'DESC');
 
-  // Date: 2020-02
-  $parsed_date_start = date_parse_from_format('Y-m', $datestart);
-  $parsed_date_end = date_parse_from_format('Y-m', $dateend);
-  // ->condition('created', $created, $updated, 'BETWEEN')
-  // ->condition('created', [$first_minute_of_month, $last_minute_of_month], 'BETWEEN')
-
   if(isset($datestart) && isset($dateend)) {
-
-    //$mydate = date('U', mktime(0, 0, 0, 1, 2, 2022));
+    echo "Filtering by date created";
     $my_start_date = date('U', mktime(0, 0, 0, "1", "1", $datestart));
     $my_end_date = date('U', mktime(0, 0, 0, "12", "1", $dateend));
 
-    $query->condition('created', $my_start_date, '>=');
-    $query->condition('created', $my_end_date, '<=');
+    $query->condition('created', array($my_start_date, $my_end_date), 'BETWEEN');
+  }
+
+  if(isset($dc) || isset($datechanged)) {
+    echo "Filtering by date changed/updated";
+
+    $changed_start_date = date('U', mktime(0, 0, 0, "1", "1", $datechanged));
+    $changed_end_date = date('U', mktime(0, 0, 0, "12", "1", $datechanged));
+    
+    $query->condition('changed', array($changed_start_date, $changed_end_date), 'BETWEEN');
   }
 
   // Get the queries.
@@ -269,6 +277,11 @@ function print_help_message() {
   echo PHP_EOL . PHP_EOL ."Example: nohup sudo php scripts/drush-script.php --verbose yes --status active  --filename /home/alexmoreno/needs-work.csv &";
   
   echo PHP_EOL . PHP_EOL;
+}
+
+/* TODO: CLEANUP */
+function fetch_arguments() {
+
 }
 
 ?>
