@@ -31,8 +31,8 @@ chdir(DRUPAL_ROOT);
 define('SMALL_FILE', 1000);
 
 // Fetch command line options.
-$short_options = "hl::f::st:lm:vb:env:ds:de:dc";
-$long_options = ["help", "filename:", "status:", "limit:", "verbose:", "env:", "datestart:", "dateend:", "datechanged:"];
+$short_options = "hl::f::st:lm:vb:env:dcr:de:dc";
+$long_options = ["help", "filename:", "status:", "limit:", "verbose:", "env:", "datecreated:", "dateend:", "datechanged:"];
 $options = getopt($short_options, $long_options);
 $verbose = FALSE;
 
@@ -50,11 +50,11 @@ if(isset($options["vb"]) || isset($options["verbose"])) {
   echo "Verbose enabled, being noisy.";
 }
 
-if(isset($options["ds"]) || isset($options["datestart"])) {
-  $datestart = $options["datestart"];
+if(isset($options["dcr"]) || isset($options["datecreated"])) {
+  $datecreated = $options["datecreated"];
 
   if($verbose) {
-    echo PHP_EOL . "DateStart:: " . $datestart;
+    echo PHP_EOL . "Date created:: " . $datecreated;
   }
 }
 
@@ -86,9 +86,23 @@ if(isset($options["st"]) || isset($options["status"])) {
   $status = isset($options["st"]) ? $options["st"] : $options["status"];
 
   // All active issues
-  //->condition('field_issue_status_value', [3,5,6,17,18], 'NOT IN')
   if($status == "active") {
-    $status = [3,5,6,8,17,18];
+    $status = [1,13,8,14,15,4,16];
+  }
+
+  // All closed issues
+  if($status == "fixed") {
+    $status = [2,7];
+  }
+
+  // All closed issues
+  if($status == "closed") {
+    $status = [2,3,5,6,18,17,7];
+  }
+
+    // All issues
+  if($status == "all") {
+    $status = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
   }
 
   if ($verbose) {
@@ -129,6 +143,9 @@ if ($limit) {
 
 $query->join('field_data_field_issue_status','fis','n.nid = fis.entity_id');
 $query->join('field_data_field_project','fdp','n.nid = fdp.entity_id');
+//$query->join('field_data_field_tags','fdt','n.nid = fdp.entity_id');
+
+
 
 if ($verbose) {
   echo "Executing query: ";
@@ -136,23 +153,24 @@ if ($verbose) {
 
 // TODO: Add date ranges.
 $results = $query
-  ->fields('n', array('nid', 'title', 'created', 'changed'))
+  ->fields('n', array('nid', 'title', 'created', 'changed', 'uid'))
   ->fields('fis', array('field_issue_status_value'))
   ->fields('fdp', array('field_project_target_id'))
+  //->fields('fdt', array('field_tags_tid'))
   ->condition('status', 1)
   ->condition('field_issue_status_value', $status)
   ->orderBy('created', 'DESC');
 
-  if(isset($datestart) && isset($dateend)) {
-    echo "Filtering by date created";
-    $my_start_date = date('U', mktime(0, 0, 0, "1", "1", $datestart));
-    $my_end_date = date('U', mktime(0, 0, 0, "12", "1", $dateend));
+  if(isset($datecreated)) {
+    echo "Filtering by date created" . PHP_EOL;
+    $my_start_date = date('U', mktime(0, 0, 0, "1", "1", $datecreated));
+    $my_end_date = date('U', mktime(0, 0, 0, "12", "1", $datecreated));
 
     $query->condition('created', array($my_start_date, $my_end_date), 'BETWEEN');
   }
 
   if(isset($dc) || isset($datechanged)) {
-    echo "Filtering by date changed/updated";
+    echo "Filtering by date changed/updated" . PHP_EOL;
 
     $changed_start_date = date('U', mktime(0, 0, 0, "1", "1", $datechanged));
     $changed_end_date = date('U', mktime(0, 0, 0, "12", "1", $datechanged));
@@ -165,17 +183,31 @@ $results = $query
 
   // Prepare to write the csv.
   $csvfile = "issues.csv";
+  $fileusers = "users.csv";
   if ($fileoutput != "") {
-    $csvfile = $fileoutput;  
+    $csvfile = $fileoutput;
+    $fileusers =  $fileoutput . '-unique-authors.csv';
+    $filecommenters =  $fileoutput . '-commenters.csv';
+
   }
   $fp = fopen($csvfile, 'w');
 
+  if ($verbose) {
+    echo "users cvs: " . $fileusers;
+    echo "commenters cvs: " . $filecommenters;
+  }
+
+  $fpusers = fopen($fileusers, 'w');
+  $fpcommenters = fopen($filecommenters, 'w');
+
   $issues = Array();
   //array_push($issues, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size'));
-  fputcsv($fp, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size'));
+  fputcsv($fp, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size', 'tags'));
 
   $interval = 0;
 
+//  $commenters = array();
+  $uniqueAuthors = array();
   // Ready to iterate.
   foreach($results as $result) {
     $created = date('F j, Y, g:i a', $result->created);
@@ -183,22 +215,59 @@ $results = $query
     $interval = diffDates($created, $changed);
 
     $node = node_load($result->nid);
+    // Store the current author/user UID.
+    if (isset($uniqueAuthors[$result->uid])) {
+      $uniqueAuthors[$result->uid][1]++;
+    }
+    else {
+      //$uniqueAuthors[$result->uid] = 1;
+      $uniqueAuthors[$result->uid][0] = $result->uid;
+      $uniqueAuthors[$result->uid][1] = 1;
+    } 
+
     if ($verbose) {
-      echo "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: " 
-      . $result->field_issue_status_value . " project ID :: " . $result->field_project_target_id 
-      . " CREATED: " . date("d m Y",$result->created) . PHP_EOL;
+      echo "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: "
+      . $result->field_issue_status_value . " project ID :: " . $result->field_project_target_id
+      . " Author UID: " . $result->uid
+      . " CREATED: " . date("d m Y",$result->created)
+      . " CHANGED: " . date("d m Y",$result->changed);
+
+    }
+
+    // Get the tags.
+    $tags = "";
+    foreach($node->taxonomy_vocabulary_9[und] as $taxonomy) {
+      $term = taxonomy_term_load($taxonomy['tid']);
+      $tags = $tags . "," . $term->name;
+    }
+
+    if($tags != "") {
+      $tags = trim($tags, ',');
+      if($verbose) {
+        echo "all tags: ";
+        print_r($tags);  
+        echo PHP_EOL;
+      }
     }
 
     $comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
 
     $filesize = 0;
-    $numAuthors = array();;
+    $numAuthors = array();
     foreach($comments as $comment) {
       $currentComment = comment_load($comment);
 
       // Get current Author.
       $numAuthors[$currentComment->name] = $currentComment->name;
 
+/*      // Store the user as commenter.
+      if (isset($commenters[$currentComment->name])) {
+        $commenters[$currentComment->name]++;
+      }
+      else {
+        $commenters[$currentComment->name] = 1;
+      }
+*/
       // TODO: Get number of authors per issue. if author is not in array, add a new one
       // if patch does not exist, but there is a Gitlab MR, check if there is an API.
       // CHECK THE DIFF: https://git.drupalcode.org/project/entity_jump_menu/-/merge_requests/2.diff
@@ -233,12 +302,29 @@ $results = $query
 
   // Move to array.
   $output = Array($result->nid,$result->title, $created, $changed, $interval, 
-  count($comments), $result->field_issue_status_value, sizeof($numAuthors), $filesize);
+  count($comments), $result->field_issue_status_value, sizeof($numAuthors), $filesize, $tags);
   // Writing to the csv.
   fputcsv($fp, $output);
 }
 
 fclose($fp);
+
+/*
+echo "Commenters: ";
+print_r($commenters);
+echo "Unique Authors: ";
+print_r($uniqueAuthors);
+foreach($uniqueAuthors as $uniqueAuthor) {
+  fputcsv($fpusers, $uniqueAuthor);
+}
+fclose($fpusers);
+
+
+fputcsv($fpcommenters, $commenters);
+
+fclose($fpcommenters);
+*/
+
 
 /**
  * Calculating time lapsed between two dates.
@@ -266,6 +352,22 @@ function print_help_message() {
   echo PHP_EOL . " - RTBC: 14";
   echo PHP_EOL . " - All active issues: active";
   echo PHP_EOL . " -- DateStart";
+  echo PHP_EOL . " All statuses";
+  echo PHP_EOL . " 1|Active";
+  echo PHP_EOL . " 13|Needs work";
+  echo PHP_EOL . " 8|Needs review";
+  echo PHP_EOL . " 14|Reviewed & tested by the community";
+  echo PHP_EOL . " 15|Patch (to be ported)";
+  echo PHP_EOL . "4|Postponed";
+  echo PHP_EOL . "16|Postponed (maintainer needs more info)";
+
+  echo PHP_EOL . "2|Fixed --> NOT USED FOR HISTORIC DATA. After 3 months they are moved into Closed(Fixed)";
+  echo PHP_EOL . "3|Closed (duplicate)";
+  echo PHP_EOL . "5|Closed (won't fix)";
+  echo PHP_EOL . "6|Closed (works as designed)";
+  echo PHP_EOL . "18|Closed (cannot reproduce)";
+  echo PHP_EOL . "17|Closed (outdated)";
+  echo PHP_EOL . "7|Closed (fixed)";
   echo PHP_EOL;
   echo PHP_EOL . " - Examples:";
   echo PHP_EOL . " php scripts/drush-script.php  --status 14";
