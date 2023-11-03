@@ -23,9 +23,9 @@
  */
 // From current folder.
 // Stage.
-//define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
+define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
 // Dev.
-define('DRUPAL_ROOT', "/var/www/dev/alexmor-drupal.dev.devdrupal.org/htdocs/");
+//define('DRUPAL_ROOT', "/var/www/dev/alexmor-drupal.dev.devdrupal.org/htdocs/");
 chdir(DRUPAL_ROOT);
 
 define('SMALL_FILE', 1000);
@@ -132,6 +132,8 @@ $ip_address = $_SERVER['REMOTE_ADDR'];
 require_once DRUPAL_ROOT . '/includes/bootstrap.inc';
 drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
 
+
+// Build the query.
 $query = db_select('node', 'n');
 // Temporarily limit number of queries if needed for debugging.
 if ($limit) {
@@ -143,20 +145,15 @@ if ($limit) {
 
 $query->join('field_data_field_issue_status','fis','n.nid = fis.entity_id');
 $query->join('field_data_field_project','fdp','n.nid = fdp.entity_id');
-//$query->join('field_data_field_tags','fdt','n.nid = fdp.entity_id');
-
-
 
 if ($verbose) {
   echo "Executing query: ";
 }
 
-// TODO: Add date ranges.
 $results = $query
   ->fields('n', array('nid', 'title', 'created', 'changed', 'uid'))
   ->fields('fis', array('field_issue_status_value'))
   ->fields('fdp', array('field_project_target_id'))
-  //->fields('fdt', array('field_tags_tid'))
   ->condition('status', 1)
   ->condition('field_issue_status_value', $status)
   ->orderBy('created', 'DESC');
@@ -174,13 +171,14 @@ $results = $query
 
     $changed_start_date = date('U', mktime(0, 0, 0, "1", "1", $datechanged));
     $changed_end_date = date('U', mktime(0, 0, 0, "12", "1", $datechanged));
-    
+
     $query->condition('changed', array($changed_start_date, $changed_end_date), 'BETWEEN');
   }
 
   // Get the queries.
   $results = $query->execute();
 
+  // TODO: Move to its own function.
   // Prepare to write the csv.
   $csvfile = "issues.csv";
   $fileusers = "users.csv";
@@ -188,7 +186,6 @@ $results = $query
     $csvfile = $fileoutput;
     $fileusers =  $fileoutput . '-unique-authors.csv';
     $filecommenters =  $fileoutput . '-commenters.csv';
-
   }
   $fp = fopen($csvfile, 'w');
 
@@ -208,6 +205,7 @@ $results = $query
 
 //  $commenters = array();
   $uniqueAuthors = array();
+  $allTags = Array();
   // Ready to iterate.
   foreach($results as $result) {
     $created = date('F j, Y, g:i a', $result->created);
@@ -220,7 +218,6 @@ $results = $query
       $uniqueAuthors[$result->uid][1]++;
     }
     else {
-      //$uniqueAuthors[$result->uid] = 1;
       $uniqueAuthors[$result->uid][0] = $result->uid;
       $uniqueAuthors[$result->uid][1] = 1;
     } 
@@ -236,9 +233,13 @@ $results = $query
 
     // Get the tags.
     $tags = "";
+
     foreach($node->taxonomy_vocabulary_9[und] as $taxonomy) {
       $term = taxonomy_term_load($taxonomy['tid']);
       $tags = $tags . "," . $term->name;
+      if(isset($allTags[$term->name])) {
+        $allTags[$term->name] = $term->name;
+      }
     }
 
     if($tags != "") {
@@ -300,6 +301,7 @@ $results = $query
 
 	}
 
+
   // Move to array.
   $output = Array($result->nid,$result->title, $created, $changed, $interval, 
   count($comments), $result->field_issue_status_value, sizeof($numAuthors), $filesize, $tags);
@@ -308,6 +310,7 @@ $results = $query
 }
 
 fclose($fp);
+fclose($fpBlocked);
 
 /*
 echo "Commenters: ";
@@ -324,6 +327,12 @@ fputcsv($fpcommenters, $commenters);
 
 fclose($fpcommenters);
 */
+
+
+function cleanTags($tags) {
+
+}
+
 
 
 /**
@@ -384,6 +393,41 @@ function print_help_message() {
 /* TODO: CLEANUP */
 function fetch_arguments() {
 
+}
+
+
+
+function getStatus() {
+  if(isset($options["st"]) || isset($options["status"])) {
+    $status = isset($options["st"]) ? $options["st"] : $options["status"];
+  
+    // All active issues
+    if($status == "active") {
+      $status = [1,13,8,14,15,4,16];
+    }
+  
+    // All closed issues
+    if($status == "fixed") {
+      $status = [2,7];
+    }
+  
+    // All closed issues
+    if($status == "closed") {
+      $status = [2,3,5,6,18,17,7];
+    }
+  
+      // All issues
+    if($status == "all") {
+      $status = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
+    }
+  
+    if ($verbose) {
+      echo PHP_EOL;
+      echo "Setting up status: ";
+      print_r($status);  
+    }
+
+    return $status;
 }
 
 ?>
