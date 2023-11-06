@@ -33,7 +33,8 @@ require_once 'lib.php';
 
 // Fetch command line options.
 $short_options = "hl::f::st:lm:vb:env:dcr:de:dc";
-$long_options = ["help", "filename:", "status:", "limit:", "verbose:", "env:", "datecreated:", "dateend:", "datechanged:"];
+$long_options = ["help", "filename:", "status:", "limit:", "verbose:", 
+"env:", "datecreated:", "dateend:", "datechanged:"];
 $options = getopt($short_options, $long_options);
 
 helpMessage($options);
@@ -60,17 +61,88 @@ if ($verbose) {
 
 $results = fetchResults($query, $status, $datecreated, $datechanged);
 
+$uniqueAuthors = array();
+$maker = array();
+
 foreach($results as $result) {
-  
+  $node = node_load($result->nid);
+    // Store the current author/user UID.
+    if (isset($uniqueAuthors[$result->uid])) {
+      // Store and array with what issues this user has created.
+      $uniqueAuthors[$result->uid][0][] = $result->nid;
+      $uniqueAuthors[$result->uid][1]++;
+    }
+    else {
+      $uniqueAuthors[$result->uid][0][] = $result->nid;
+      // First time finding this user, so set counter to 1.
+      $uniqueAuthors[$result->uid][1] = 1;
+    }
+
   if ($verbose) {
     echo PHP_EOL . "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: "
     . $result->field_issue_status_value . " project ID :: " . $result->field_project_target_id
     . " Author UID: " . $result->uid
     . " CREATED: " . date("d m Y",$result->created)
-    . " CHANGED: " . date("d m Y",$result->changed);
+    . " CHANGED: " . date("d m Y",$result->changed)
+    ;
 
   }
+
+  $comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
+
+  $filesize = 0;
+  foreach($comments as $comment) {
+    $currentComment = comment_load($comment);
+
+    foreach($currentComment->field_issue_changes['und'] as $field_file) {
+      foreach($field_file['new_value'] as $file) {
+        if (!empty($file['filename'])) {
+
+          // If we find a patch.
+          if (strpos($file['filename'], '.patch')!== false) {
+            if ($verbose) {
+              echo "Patch found, user is a maker. Storing.";
+              echo PHP_EOL . "fid:: " . $file['fid'];
+              echo PHP_EOL . "uri:: " . $file['uri'] . PHP_EOL;
+            }
+            echo "disecting comment";
+            print_r($currentComment);
+
+            // Store the current User/Maker UID.
+            if(isset($maker[$currentComment->uid])) {
+              $maker[$currentComment->uid]['numberpatches']++;
+            } else {
+              $maker[$currentComment->uid]['numberpatches'] = 1;
+            }
+
+            // Store the UID anyway for faster, easier reference.
+            $maker[$currentComment->uid]['uid'] = $currentComment->uid;
+            // Store the CID where the patch was posted.
+            $maker[$currentComment->uid]['node'][$currentComment->nid]['cid'] = $currentComment->cid;
+            $maker[$currentComment->uid]['node'][$currentComment->nid]['created'] = $currentComment->created;
+            
+            //echo "disecting";
+            //print_r($maker);
+
+
+          }
+        }
+      }
+    }
+
+}
 }
 
-
 echo "finished.";
+print_r($uniqueAuthors);
+
+echo "Authors / Makers";
+print_r($maker);
+
+/*
+* Find if the user has created content previously, and 
+* if that content contained any patches.
+*/
+function userPreviousNodes() {
+  
+}
