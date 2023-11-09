@@ -54,7 +54,7 @@ setEnvironment($options);
 require_once DRUPAL_ROOT . '/includes/bootstrap.inc';
 drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
 
-$query = buildQuery();
+$query = buildQuery($limit);
 if ($verbose) {
   echo "Executing query: ";
 }
@@ -62,7 +62,7 @@ if ($verbose) {
 $results = fetchResults($query, $status, $datecreated, $datechanged);
 
 $uniqueAuthors = array();
-$maker = array();
+$makers = array();
 
 foreach($results as $result) {
   $node = node_load($result->nid);
@@ -88,61 +88,72 @@ foreach($results as $result) {
 
   }
 
-  $comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
-
-  $filesize = 0;
-  foreach($comments as $comment) {
-    $currentComment = comment_load($comment);
-
-    foreach($currentComment->field_issue_changes['und'] as $field_file) {
-      foreach($field_file['new_value'] as $file) {
-        if (!empty($file['filename'])) {
-
-          // If we find a patch.
-          if (strpos($file['filename'], '.patch')!== false) {
-            if ($verbose) {
-              echo "Patch found, user is a maker. Storing.";
-              echo PHP_EOL . "fid:: " . $file['fid'];
-              echo PHP_EOL . "uri:: " . $file['uri'] . PHP_EOL;
-            }
-            echo "disecting comment";
-            print_r($currentComment);
-
-            // Store the current User/Maker UID.
-            if(isset($maker[$currentComment->uid])) {
-              $maker[$currentComment->uid]['numberpatches']++;
-            } else {
-              $maker[$currentComment->uid]['numberpatches'] = 1;
-            }
-
-            // Store the UID anyway for faster, easier reference.
-            $maker[$currentComment->uid]['uid'] = $currentComment->uid;
-            // Store the CID where the patch was posted.
-            $maker[$currentComment->uid]['node'][$currentComment->nid]['cid'] = $currentComment->cid;
-            $maker[$currentComment->uid]['node'][$currentComment->nid]['created'] = $currentComment->created;
-            
-            //echo "disecting";
-            //print_r($maker);
-
-
-          }
-        }
-      }
-    }
-
-}
+  $makers = getMakers($node, $makers);
 }
 
-echo "finished.";
-print_r($uniqueAuthors);
+//echo "finished.";
+//print_r($uniqueAuthors);
 
 echo "Authors / Makers";
-print_r($maker);
+//print_r($makers);
+echo PHP_EOL;
+
+
+storeMakersCSV($makers);
+
+// Find if only those makers in $makers have previous content with patches created in the past.
+findPreviousPatches($currentComment->uid, $makers[$currentComment->uid]);
+
 
 /*
 * Find if the user has created content previously, and 
 * if that content contained any patches.
 */
-function userPreviousNodes() {
-  
+function findPreviousPatches($uid, $maker) {
+
+  echo "finding more patches.";
+
+  foreach($makers as $maker) {
+    echo "maker:: " . $maker['uid'];
+    // Does $maker['uid'] have more patches?
+    findContentsByUser($maker['uid']);
+    // Does any of these content exist in $maker['node'][NID] Array?
+  }
+
+  /*
+  $patches = Array();
+  // Build the query.
+  $queryUser = db_select('node', 'n');
+  $queryUser->fields('n', array('nid', 'title', 'created', 'changed', 'uid'));
+  $queryUser->condition('uid', $uid);
+  $authorNids = $queryUser->execute();
+
+  // Author NIDs:
+  echo PHP_EOL . PHP_EOL . " Author NIDs";
+  foreach($authorNids as $node) {
+    echo PHP_EOL . "node::: ";
+    print_r($node);
+
+    $nodeLoaded = node_load($node->nid);
+    getMakers($nodeLoaded, $patches);
+
+  }
+  */
+  // are thoser NIDs already in the $maker Array?
+}
+
+/*
+*
+*/
+function findContentsByUser($uid) {
+
+  echo "finding other patches created by the current user: " . $maker['uid'];
+
+  $queryUser = db_select('node', 'n');
+  $queryUser->fields('n', array('nid', 'title', 'created', 'changed', 'uid'));
+  $queryUser->condition('uid', $maker['uid']);
+  $authorNids = $queryUser->execute();
+
+  echo "all nids: ";
+  print_r($authorNids);
 }
