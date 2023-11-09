@@ -218,3 +218,108 @@ function fetchResults($query, $status, $datecreated, $datechanged) {
 
     return $results;
 }
+
+/*
+* Find if the current node contains a patch, and store the user in the array if so
+* TODO: separation of concerns is lacking here. Both functionalities, find patch and store in array
+* should be split.
+*/
+function getMakers($node, $makers) {
+  $comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
+
+  $filesize = 0;
+  foreach($comments as $comment) {
+    $currentComment = comment_load($comment);
+
+    foreach($currentComment->field_issue_changes['und'] as $field_file) {
+      foreach($field_file['new_value'] as $file) {
+        if (!empty($file['filename'])) {
+
+          // If we find a patch.
+          if (strpos($file['filename'], '.patch')!== false) {
+            if ($verbose) {
+              echo "Patch found, user is a maker. Storing.";
+              echo PHP_EOL . "fid:: " . $file['fid'];
+              echo PHP_EOL . "uri:: " . $file['uri'] . PHP_EOL;
+            }
+
+            // Store the current User/Maker UID.
+            if(isset($makers[$currentComment->uid])) {
+              $makers[$currentComment->uid]['numberpatches']++;
+            } else {
+              $makers[$currentComment->uid]['numberpatches'] = 1;
+            }
+
+            // Store just once, unless we want to store all patches
+            //if ($makers[$currentComment->uid]['numberpatches'] > 1) {
+              // Store the UID again for later easier reference.
+              $makers[$currentComment->uid]['uid'] = $currentComment->uid;
+              // Store the CID where the patch was posted.
+              $makers[$currentComment->uid]['node'][$currentComment->nid]['nid'] = $currentComment->nid;
+              $makers[$currentComment->uid]['node'][$currentComment->nid]['cid'] = $currentComment->cid;
+              $makers[$currentComment->uid]['node'][$currentComment->nid]['created'] = $currentComment->created;
+
+            //}            
+          }
+        }
+      }
+    }
+  }
+  return $makers;
+}
+
+/*
+* Store makers in a CSV file.
+*/
+function storeMakersCSV($makers, $fpMakersName = "makers.csv") {
+  echo "file: " . $fpMakersName;
+
+  $fpMakers = fopen($fpMakersName, 'w');
+  fputcsv($fpMakers, Array('UID', 'User created', 'Last login', 'Num Patches', 'Patch (cid)', 'nid', 'created'));
+  
+  foreach($makers as $maker) {
+    $userAccount = user_load($maker['uid']);
+    $uid = $maker['uid'];
+
+    echo PHP_EOL . PHP_EOL;
+    echo PHP_EOL . "------- -------"; 
+    echo PHP_EOL . " M a k e r";
+    echo PHP_EOL . "------- -------";
+    echo PHP_EOL . "User created: " . date('F j, Y, g:i a', $userAccount->created);
+    echo PHP_EOL . "Last login: " . date('F j, Y, g:i a', $userAccount->login);
+    echo PHP_EOL . "Patches: " . $maker['numberpatches'];
+    echo " uid: " . $uid;
+  
+    echo PHP_EOL;
+    echo PHP_EOL;
+  
+    echo " Patches by this maker";
+    echo PHP_EOL . "------- -------";
+    foreach($maker['node'] as $node) {
+      echo PHP_EOL . PHP_EOL . "Comment CID: " . $node['cid'];
+      echo PHP_EOL . " - created: " . date('F j, Y, g:i a', $node['created']);
+      echo PHP_EOL . " - node: " . $node['nid'];
+  
+      $output = Array(
+        $maker['uid'], 
+        date('F j, Y, g:i a', $userAccount->created), 
+        date('F j, Y, g:i a', $userAccount->login), 
+        $maker['numberpatches'],
+        $node['cid'],
+        $node['nid'],
+        $node['created'],
+        date('F j, Y, g:i a', $userAccount->login)
+      );
+
+      // Writing to the csv.
+      echo "writing csv";
+      fputcsv($fpMakers, $output); 
+    }
+
+    echo PHP_EOL;
+  
+  
+  }
+  fclose($fpMakers);
+
+}
