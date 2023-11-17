@@ -45,6 +45,14 @@ if(isset($options["lm"]) || isset($options["limit"])) {
   $limit = isset($options["lm"]) ? $options["lm"] : $options["limit"];
 }
 
+if(isset($options["hl"]) || isset($options["help"])) {
+  $help = isset($options["hl"]) ? $options["help"] : $options["help"];
+
+  print_help_message();
+  exit(1);
+
+}
+
 if(isset($options["vb"]) || isset($options["verbose"])) {
   $verbose = TRUE;
   echo "Verbose enabled, being noisy.";
@@ -74,52 +82,8 @@ if(isset($options["dc"]) || isset($options["datechanged"])) {
   }
 }
 
-if(isset($options["hl"]) || isset($options["help"])) {
-  $help = isset($options["hl"]) ? $options["help"] : $options["help"];
 
-  print_help_message();
-  exit(1);
-
-}
-
-if(isset($options["st"]) || isset($options["status"])) {
-  $status = isset($options["st"]) ? $options["st"] : $options["status"];
-
-  // All active issues
-  if($status == "active") {
-    $status = [1,13,8,14,15,4,16];
-  }
-
-  // All closed issues
-  if($status == "fixed") {
-    $status = [2,7];
-  }
-
-  // All closed issues
-  if($status == "closed") {
-    $status = [2,3,5,6,18,17,7];
-  }
-
-    // All issues
-  if($status == "all") {
-    $status = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
-  }
-
-  if ($verbose) {
-    echo PHP_EOL;
-    echo "Setting up status: ";
-    print_r($status);  
-  }
-
-  // Maybe use $ENV instead?
-  if(isset($options["env"]) || isset($options["environment"])) {
-    $env = isset($options["env"]) ? $options["env"] : $options["environment"];
-    if($env == "stage") {
-      define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
-      chdir(DRUPAL_ROOT);
-    }
-  }
-}
+$status = getStatus($options);
 
 // Avoiding warning messages
 $_SERVER['SCRIPT_NAME'] = '/script.php';
@@ -232,6 +196,7 @@ $results = $query
     }
 
     // Get the tags.
+    // TODO: move to its own function.
     $tags = "";
 
     foreach($node->taxonomy_vocabulary_9[und] as $taxonomy) {
@@ -261,14 +226,6 @@ $results = $query
       // Get current Author.
       $numAuthors[$currentComment->name] = $currentComment->name;
 
-/*      // Store the user as commenter.
-      if (isset($commenters[$currentComment->name])) {
-        $commenters[$currentComment->name]++;
-      }
-      else {
-        $commenters[$currentComment->name] = 1;
-      }
-*/
       // TODO: Get number of authors per issue. if author is not in array, add a new one
       // if patch does not exist, but there is a Gitlab MR, check if there is an API.
       // CHECK THE DIFF: https://git.drupalcode.org/project/entity_jump_menu/-/merge_requests/2.diff
@@ -396,38 +353,5 @@ function fetch_arguments() {
 }
 
 
-
-function getStatus() {
-  if(isset($options["st"]) || isset($options["status"])) {
-    $status = isset($options["st"]) ? $options["st"] : $options["status"];
-  
-    // All active issues
-    if($status == "active") {
-      $status = [1,13,8,14,15,4,16];
-    }
-  
-    // All closed issues
-    if($status == "fixed") {
-      $status = [2,7];
-    }
-  
-    // All closed issues
-    if($status == "closed") {
-      $status = [2,3,5,6,18,17,7];
-    }
-  
-      // All issues
-    if($status == "all") {
-      $status = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
-    }
-  
-    if ($verbose) {
-      echo PHP_EOL;
-      echo "Setting up status: ";
-      print_r($status);  
-    }
-
-    return $status;
-}
 
 ?>
