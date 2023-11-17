@@ -1,4 +1,5 @@
 <?php
+
 // Avoiding warning messages
 $_SERVER['SCRIPT_NAME'] = '/script.php';
 $_SERVER['SCRIPT_FILENAME'] = '/path/to/this/script.php';
@@ -167,9 +168,19 @@ function setEnvironment($options) {
 /*
 * Build the query.
 */
-function buildQuery($limit) {
+function buildQuery($limit, $type) {
     // Build the query.
-    $query = db_select('node', 'n');
+    if ($type == "users") {
+      $query = db_select('users', 'u');
+    } else {
+      $query = db_select('node', 'n');
+
+      $query->join('field_data_field_issue_status','fis','n.nid = fis.entity_id');
+      $query->join('field_data_field_project','fdp','n.nid = fdp.entity_id');
+      // Filter by issue credits.
+      // $query->join('field_issue_credit','fic','n.nid = fdp.entity_id');
+    }
+
     // Temporarily limit number of queries if needed for debugging.
     if ($limit) {
       $query->range(0, $limit);
@@ -177,10 +188,7 @@ function buildQuery($limit) {
         echo PHP_EOL . "NOTE: limiting to $limit queries by cli." . PHP_EOL . PHP_EOL;
       }
     }
-    
-    $query->join('field_data_field_issue_status','fis','n.nid = fis.entity_id');
-    $query->join('field_data_field_project','fdp','n.nid = fdp.entity_id');
-    
+
     return $query;
 }
 
@@ -217,6 +225,64 @@ function fetchResults($query, $status, $datecreated, $datechanged) {
     $results = $query->execute();
 
     return $results;
+}
+
+
+/*
+* Fetch users
+*/
+function fetchUsers($query, $status, $datecreated, $datechanged) {
+  $results = $query
+  ->fields('u', array('uid', 'name', 'created', 'changed', 'login', 'status'))
+  ->orderBy('created', 'DESC');
+
+  if(isset($datecreated)) {
+    echo "Filtering by date created" . PHP_EOL;
+    $my_start_date = date('U', mktime(0, 0, 0, "1", "1", $datecreated));
+    $my_end_date = date('U', mktime(0, 0, 0, "12", "1", $datecreated));
+
+    $query->condition('created', array($my_start_date, $my_end_date), 'BETWEEN');
+  }
+
+  if(isset($dc) || isset($datechanged)) {
+    echo "Filtering by date changed/updated" . PHP_EOL;
+
+    $changed_start_date = date('U', mktime(0, 0, 0, "1", "1", $datechanged));
+    $changed_end_date = date('U', mktime(0, 0, 0, "12", "1", $datechanged));
+
+    $query->condition('changed', array($changed_start_date, $changed_end_date), 'BETWEEN');
+  }
+
+  // Get the queries.
+  $results = $query->execute();
+
+  return $results;
+}
+
+/*
+* Fetch comments
+*/
+function fetchAllCommentsWithCredits($uid) {
+  $queryComments = db_select('comment', 'c');
+  $queryComments->join('field_data_field_issue_credit','fic','c.cid = fic.field_issue_credit_target_id');
+  $queryComments->fields('c', array('cid', 'uid', 'nid', 'created', 'changed'));
+  $queryComments->fields('fic', array('field_issue_credit_target_id'));
+  $queryComments->orderBy('created', 'ASC');
+
+  $queryComments->condition('uid', $uid, "=");
+  // Order so the first result will be the oldest comment.
+  // TODO.
+
+  return $queryComments->execute();
+}
+
+/*
+* Get a specific comment.
+*/
+function getComment($cid) {
+  $result = db_query('SELECT cid, nid, created, changed FROM comment WHERE cid = :cid',array(':cid' => $cid));
+
+  return $result->fetchObject();
 }
 
 /*
@@ -266,6 +332,54 @@ function getMakers($node, $makers) {
     }
   }
   return $makers;
+}
+
+/*
+* Find if the current node contains users who have been credited for their contribution.
+*/
+function getCreditedUsers($node, $makers) {
+
+  $comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
+
+  $filesize = 0;
+  foreach($comments as $comment) {
+    $currentComment = comment_load($comment);
+
+    foreach($currentComment->field_issue_changes['und'] as $field_file) {
+
+
+
+
+          // If we find a credit.
+          if (strpos($file['filename'], '.patch')!== false) {
+            if ($verbose) {
+              echo "Patch found, user is a maker. Storing.";
+              echo PHP_EOL . "fid:: " . $file['fid'];
+              echo PHP_EOL . "uri:: " . $file['uri'] . PHP_EOL;
+            }
+
+            // Store the current User/Maker UID.
+            if(isset($makers[$currentComment->uid])) {
+              $makers[$currentComment->uid]['numberpatches']++;
+            } else {
+              $makers[$currentComment->uid]['numberpatches'] = 1;
+            }
+
+            // Store just once, unless we want to store all patches
+            // Store the UID again for later easier reference.
+            $makers[$currentComment->uid]['uid'] = $currentComment->uid;
+            // Store the CID where the patch was posted.
+            $makers[$currentComment->uid]['node'][$currentComment->nid]['nid'] = $currentComment->nid;
+            $makers[$currentComment->uid]['node'][$currentComment->nid]['cid'] = $currentComment->cid;
+            $makers[$currentComment->uid]['node'][$currentComment->nid]['created'] = $currentComment->created;
+            
+          }
+        
+      
+    }
+  }
+
+
 }
 
 /*
@@ -322,4 +436,62 @@ function storeMakersCSV($makers, $fpMakersName = "makers.csv") {
   }
   fclose($fpMakers);
 
+}
+
+function getReadableDate($unixdate) {
+  return date('F j, Y, g:i a', $unixdate);
+}
+
+
+/*
+* Find if the user has created content previously, and 
+* if that content contained any patches.
+*/
+function findPreviousPatches($uid, $maker) {
+
+  echo "finding more patches.";
+
+  foreach($makers as $maker) {
+    echo "maker:: " . $maker['uid'];
+    // Does $maker['uid'] have more patches?
+    findContentsByUser($maker['uid']);
+    // Does any of these content exist in $maker['node'][NID] Array?
+  }
+
+  /*
+  $patches = Array();
+  // Build the query.
+  $queryUser = db_select('node', 'n');
+  $queryUser->fields('n', array('nid', 'title', 'created', 'changed', 'uid'));
+  $queryUser->condition('uid', $uid);
+  $authorNids = $queryUser->execute();
+
+  // Author NIDs:
+  echo PHP_EOL . PHP_EOL . " Author NIDs";
+  foreach($authorNids as $node) {
+    echo PHP_EOL . "node::: ";
+    print_r($node);
+
+    $nodeLoaded = node_load($node->nid);
+    getMakers($nodeLoaded, $patches);
+
+  }
+  */
+  // are thoser NIDs already in the $maker Array?
+}
+
+/*
+*
+*/
+function findContentsByUser($uid) {
+
+  echo "finding other patches created by the current user: " . $maker['uid'];
+
+  $queryUser = db_select('node', 'n');
+  $queryUser->fields('n', array('nid', 'title', 'created', 'changed', 'uid'));
+  $queryUser->condition('uid', $maker['uid']);
+  $authorNids = $queryUser->execute();
+
+  echo "all nids: ";
+  print_r($authorNids);
 }
