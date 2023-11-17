@@ -66,6 +66,45 @@ $makers = array();
 
 foreach($results as $result) {
   $node = node_load($result->nid);
+  if (!empty($node->field_issue_credit)) {
+
+    echo PHP_EOL;
+    echo PHP_EOL;
+
+    echo " ______ " . PHP_EOL;
+    echo PHP_EOL . PHP_EOL . "__ __ node with credits" . PHP_EOL;
+    // This are the nodes where credit has been give.
+    
+    foreach($node->field_issue_credit['und'] as $comment) {
+      
+      echo " ______ COMMENT:: " . "CID:: " . $comment['target_id'];
+      echo " node:: " . $result->nid;
+      
+      $commentObj = getComment($comment['target_id']);
+
+      echo "cid: " . $commentObj->cid;
+      echo PHP_EOL . "nid: " . $commentObj->nid;
+      echo PHP_EOL . "date: " . getReadableDate($commentObj->created);
+      echo PHP_EOL . "date: " . getReadableDate($commentObj->changed);
+      
+      // TODO:
+      // Store each date of this user, identified by user->nid->cid
+      // Search all nodes created by this user
+      // Store in the same format = user->nid->cid
+      // Use this format to compare if there are contributions previous to the current date
+      // marking first and last contributions.
+
+      echo " ______ " . PHP_EOL;
+
+      echo " ______ ::COMMENT " . PHP_EOL;
+    }
+
+    //print_r($node);
+    echo PHP_EOL;
+    echo PHP_EOL;
+
+  }
+
     // Store the current author/user UID.
     if (isset($uniqueAuthors[$result->uid])) {
       // Store and array with what issues this user has created.
@@ -88,7 +127,8 @@ foreach($results as $result) {
 
   }
 
-  $makers = getMakers($node, $makers);
+//  $makers = getMakers($node, $makers);
+  $makers = getCreditedUsers($node, $makers);
 }
 
 //echo "finished.";
@@ -104,56 +144,3 @@ storeMakersCSV($makers);
 // Find if only those makers in $makers have previous content with patches created in the past.
 findPreviousPatches($currentComment->uid, $makers[$currentComment->uid]);
 
-
-/*
-* Find if the user has created content previously, and 
-* if that content contained any patches.
-*/
-function findPreviousPatches($uid, $maker) {
-
-  echo "finding more patches.";
-
-  foreach($makers as $maker) {
-    echo "maker:: " . $maker['uid'];
-    // Does $maker['uid'] have more patches?
-    findContentsByUser($maker['uid']);
-    // Does any of these content exist in $maker['node'][NID] Array?
-  }
-
-  /*
-  $patches = Array();
-  // Build the query.
-  $queryUser = db_select('node', 'n');
-  $queryUser->fields('n', array('nid', 'title', 'created', 'changed', 'uid'));
-  $queryUser->condition('uid', $uid);
-  $authorNids = $queryUser->execute();
-
-  // Author NIDs:
-  echo PHP_EOL . PHP_EOL . " Author NIDs";
-  foreach($authorNids as $node) {
-    echo PHP_EOL . "node::: ";
-    print_r($node);
-
-    $nodeLoaded = node_load($node->nid);
-    getMakers($nodeLoaded, $patches);
-
-  }
-  */
-  // are thoser NIDs already in the $maker Array?
-}
-
-/*
-*
-*/
-function findContentsByUser($uid) {
-
-  echo "finding other patches created by the current user: " . $maker['uid'];
-
-  $queryUser = db_select('node', 'n');
-  $queryUser->fields('n', array('nid', 'title', 'created', 'changed', 'uid'));
-  $queryUser->condition('uid', $maker['uid']);
-  $authorNids = $queryUser->execute();
-
-  echo "all nids: ";
-  print_r($authorNids);
-}
