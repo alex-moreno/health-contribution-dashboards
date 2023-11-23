@@ -81,7 +81,7 @@ foreach($results as $user) {
   // DEBUGGING THIS USER.
   //$user->uid = 2416470; $user->uid
   // All credits received by this user.
-  $nodesWithCredits = fetchAllNodesWithCredits($user->uid = 2416470, $limit); // 2416470
+  $nodesWithCredits = fetchAllNodesWithCredits($user->uid = $user->uid, $limit); // 2416470
 
   if (sizeof($nodesWithCredits) > 0) {
     if ($verbose) {
@@ -110,7 +110,6 @@ foreach ($nodesWithCredits as $node) {
 
     // CREATE A FUNCTION WITH THIS RECEIVING TWO DATES.
     // Debugging.
-    //$user->uid = 2416470;
     $contribDate = getCommentsNode($node, $user->uid);
 
     echo "Date found: " .  getReadableDate($contribDate->created) . PHP_EOL;

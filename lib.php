@@ -386,7 +386,7 @@ function getCommentsNode($origNode, $uid) {
     if(isset($node)) {
       echo "node:: " . $node->nid;
       echo PHP_EOL . "date:: " . PHP_EOL;
-      $allComments = comment_get_thread($node, COMMENT_MODE_FLAT, 10);
+      $allComments = comment_get_thread($node, COMMENT_MODE_FLAT, 10000);
 
       print_r($allComments);
 
