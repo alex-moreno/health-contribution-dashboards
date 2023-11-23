@@ -7,6 +7,10 @@ $_SERVER['HTTP_HOST'] = 'domain.com';
 $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
 $_SERVER['REQUEST_METHOD'] = 'POST';
 
+// Mon Nov 22 2060 13:09:57 GMT+0000. This will cause the next year 2000 effect, I know.
+define("BIGDATE", 2868354597);
+
+
 $ip_address = $_SERVER['REMOTE_ADDR'];
 
   /*
@@ -26,7 +30,7 @@ function getStatus($options, $verbose){
     if($status == "fixed") {
       $status = [2,7];
     }
-  
+
     // All closed issues
     if($status == "closed") {
       $status = [2,3,5,6,18,17,7];
@@ -231,7 +235,7 @@ function fetchResults($query, $status, $datecreated, $datechanged) {
 /*
 * Fetch users
 */
-function fetchUsers($query, $status, $datecreated, $datechanged) {
+function fetchUsers($query, $datecreated, $datechanged) {
   $results = $query
   ->fields('u', array('uid', 'name', 'created', 'changed', 'login', 'status'))
   ->orderBy('created', 'DESC');
@@ -264,16 +268,53 @@ function fetchUsers($query, $status, $datecreated, $datechanged) {
 */
 function fetchAllCommentsWithCredits($uid) {
   $queryComments = db_select('comment', 'c');
-  $queryComments->join('field_data_field_issue_credit','fic','c.cid = fic.field_issue_credit_target_id');
-  $queryComments->fields('c', array('cid', 'uid', 'nid', 'created', 'changed'));
-  $queryComments->fields('fic', array('field_issue_credit_target_id'));
+  $queryComments->fields('c', array('cid', 'uid', 'nid', 'created', 'changed', 'status'));
+  //$queryComments->fields('fic', array('field_issue_credit_target_id'));
+  //$queryComments->leftJoin('field_data_field_issue_credit','fic','c.cid = fic.field_issue_credit_target_id');
   $queryComments->orderBy('created', 'ASC');
 
-  $queryComments->condition('uid', $uid, "=");
+  $queryComments->condition('uid', $uid);
+  // TODO: Needs to be fixed or closed/fixed
+  //$queryComments->condition('status', 1); // STATUS 1 IS FOUND. Why?????
   // Order so the first result will be the oldest comment.
-  // TODO.
+  // .
 
   return $queryComments->execute();
+}
+
+/*
+* Fetch nodes where user has been credited.
+*/
+function fetchAllNodesWithCredits($uid, $limit = 100) {
+  // SELECT distinct node.nid FROM node  
+  $queryComments = db_select('node', 'n');
+  $queryComments->fields('n', array('nid', 'uid', 'created', 'changed', 'status'));
+  if ($limit != NULL) {
+    $queryComments->range(0, $limit);
+  }
+
+  // JOIN field_data_field_issue_credit ON field_data_field_issue_credit.entity_id = node.nid
+  $queryComments->join('field_data_field_issue_credit','fdic','fdic.entity_id = n.nid');
+
+  // JOIN comment ON comment.cid = field_data_field_issue_credit.field_issue_credit_target_id  
+  $queryComments->join('comment','c','c.cid = fdic.field_issue_credit_target_id');
+
+  // INNER JOIN field_data_field_issue_status ON node.nid = field_data_field_issue_status.entity_id 
+  // AND (field_data_field_issue_status.entity_type = 'node' AND field_data_field_issue_status.deleted = '0')
+  $queryComments->innerjoin('field_data_field_issue_status','fdis',"fdis.entity_id = n.nid AND (fdis.entity_type = 'node' AND fdis.deleted = '0')");
+
+  $queryComments->condition('c.uid', $uid);
+  // WHERE comment.uid = 2416470 AND node.type = 'project_issue' 
+  $queryComments->condition('n.type', 'project_issue');
+  // AND node.status = '1'
+  $queryComments->condition('n.status', '1');
+  // AND field_data_field_issue_status.field_issue_status_value IN  ('2', '7');
+  // We hard code the status as it's a requirement for credits.
+  $fieldStatus = Array(2,7);
+  $queryComments->condition('field_issue_status_value', $fieldStatus, 'IN');
+
+  // return $queryComments->execute()->fetchAll();
+  return $queryComments->distinct()->execute()->fetchAll();
 }
 
 /*
@@ -335,19 +376,53 @@ function getMakers($node, $makers) {
 }
 
 /*
+* Get the earliest comment and date where the user has a credit
+*/
+function getCommentsNode($origNode, $uid) {
+  $createdDate = BIGDATE;
+  if(!empty($origNode->nid)) {
+    $node = node_load($origNode->nid);
+
+    if(isset($node)) {
+      echo "node:: " . $node->nid;
+      echo PHP_EOL . "date:: " . PHP_EOL;
+      $allComments = comment_get_thread($node, COMMENT_MODE_FLAT, 10);
+
+      print_r($allComments);
+
+     foreach($allComments as $comment) {
+      $currentComment = comment_load($comment);
+
+      if (!empty($currentComment->uid)) {
+        $cuid = $currentComment->uid;
+        if ($cuid == $uid) {
+            // Let's find the earliest comment, which we'll take as this user 1st contribution.
+            if ($createdDate > $currentComment->created) {
+              $createdDate = $currentComment->created;
+              $firstCommentDate = $currentComment;
+            }
+        }
+      }
+     }
+
+     return $firstCommentDate;
+    }
+  }
+}
+
+
+/*
 * Find if the current node contains users who have been credited for their contribution.
 */
 function getCreditedUsers($node, $makers) {
 
-  $comments = comment_get_thread($node, COMMENT_MODE_FLAT, 100);
+  $comments = comment_get_thread($node, COMMENT_MODE_FLAT, 400);
 
   $filesize = 0;
   foreach($comments as $comment) {
     $currentComment = comment_load($comment);
 
     foreach($currentComment->field_issue_changes['und'] as $field_file) {
-
-
 
 
           // If we find a credit.

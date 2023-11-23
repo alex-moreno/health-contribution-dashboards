@@ -59,29 +59,33 @@ if ($verbose) {
   echo "Executing query: ";
 }
 
-$results = fetchUsers($query, $status, $datecreated, $datechanged);
-
 $fpMakersName = "crediter-makers.csv";
 $fpMakers = fopen($fpMakersName, 'w');
-fputcsv($fpMakers, Array('UID', 'Name', 'Status', 'User Created','User Created Unix', 'User Changed', 'User login', 'cid', 
-  'Comment UID', 'Credit target', 'Comment created', 'Comment Created Unix', 'Comment changed', 'TTFC'));
+fputcsv($fpMakers, Array('UID','NID', 'Name', 'Status', 'User Created','User Created Unix', 'User Changed', 'User login', 'cid', 
+  'Comment UID', 'Comment created', 'Comment Created Unix', 'Comment changed', 'TTFC'));
 
 // Time to first registration.
 $fpTTFName = "makers-timetofirst.csv";
 $fpMakersTTF = fopen($fpTTFName, 'w');
-fputcsv($fpMakersTTF, Array('UID', 'Name', 'Status', 'User Created','User Created Unix', 'User Changed', 'User login', 'cid', 
-  'Comment UID', 'Credit target', 'First Comment created', 'First Comment Created Unix', 'Comment changed', 'TTFC'));
+  fputcsv($fpMakersTTF, Array('UID','NID', 'Name', 'Status', 'User Created','User Created Unix', 'User Changed', 'User login', 'cid', 
+  'Comment UID', 'Comment created', 'Comment Created Unix', 'Comment changed', 'TTFC'));
+
 
 $uniqueAuthors = array();
 $makers = array();
 $firstTimeReg = array();
-foreach($results as $user) {
 
-  // Get all comments by current uid.
-  $userCommentsWithCredits = fetchAllCommentsWithCredits($user->uid);
-  // TODO: debug, can delete.
-  if ($userCommentsWithCredits->rowCount() > 0) {
+// Fetch users registered in a given date.
+$results = fetchUsers($query, $datecreated, $datechanged);
+foreach($results as $user) {
+  // DEBUGGING THIS USER.
+  //$user->uid = 2416470; $user->uid
+  // All credits received by this user.
+  $nodesWithCredits = fetchAllNodesWithCredits($user->uid = 2416470, $limit); // 2416470
+
+  if (sizeof($nodesWithCredits) > 0) {
     if ($verbose) {
+      echo " NUMBER OF CONTRIBS TOTAL :: " . sizeof($nodesWithCredits);
       echo PHP_EOL . " ------------- " . " ------------- " . PHP_EOL;
       echo PHP_EOL . "USER UID :: " . $user->uid . " Name :: " . $user->name . " - Status :: " . $user->status
       . PHP_EOL . " CREATED: " . getReadableDate($user->created)
@@ -89,47 +93,77 @@ foreach($results as $user) {
       . PHP_EOL . " LOGIN: " . getReadableDate($user->login)
       . PHP_EOL . " ------------- " . PHP_EOL . PHP_EOL;
       ;
-    }      
+
+    }
   }
 
-  foreach ($userCommentsWithCredits as $comment) {
-    if ($verbose) {
-      // All credits received by this user->uid
-      echo PHP_EOL . "CREDITTED COMMENT";
+  // Loop over all creditted nodes this user has created.
+  $ttc = NULL;
+  $contribDateCreated = BIGDATE;
+  $firstContribDate = NULL;
+  $ttcDate = 0;
+foreach ($nodesWithCredits as $node) {
 
-      echo PHP_EOL . " - UID :: " . $comment->uid . " CID :: " . $comment->cid 
-      . " - field_issue_credit_target_id :: " . $comment->field_issue_credit_target_id
-      . PHP_EOL . "    - CREATED: " . getReadableDate($comment->created)
-      . PHP_EOL . "    - CHANGED: " . getReadableDate($comment->changed);
+    echo PHP_EOL . "CREDITTED COMMENT - NID :: " . $node->nid
+    . PHP_EOL . "    - CREATED: " . getReadableDate($node->created)
+    . PHP_EOL . "    - CHANGED: " . getReadableDate($node->changed);
+
+    // CREATE A FUNCTION WITH THIS RECEIVING TWO DATES.
+    // Debugging.
+    //$user->uid = 2416470;
+    $contribDate = getCommentsNode($node, $user->uid);
+
+    echo "Date found: " .  getReadableDate($contribDate->created) . PHP_EOL;
+    //if (getReadableDate($contribDate->created) < getReadableDate($contribDateCreated)) {
+    // If date has not been set.
+    // TODO: Compare dates instead, so it's more robust.
+    if ($contribDateCreated == BIGDATE) {
+      echo "earlier date found" . PHP_EOL;
+      // Keep the current date.
+      $contribDateCreated = $contribDate->created;
+
+      echo "found earliest: " . getReadableDate($contribDate->created) . " - unix: " . $contribDate->created;
+      echo PHP_EOL . " previous: " . getReadableDate($firstContribDate->created) . " - unix: " . $firstContribDate->created;
+
+      $firstContribDate = $contribDate;
+      $ttc = date_diff(date_create(getReadableDate($user->created)), date_create(getReadableDate($firstContribDate->created)));
+      echo PHP_EOL . PHP_EOL . "TTFC ::: TADAAA:: " . $ttc->format('%R%a');
+      $ttcDate = $ttc->format('%R%a');
+    } else {
+      echo "this date: " . getReadableDate($contribDate->created) . " - unix: " . $contribDate->created;
+      echo " is not older than this one: " . getReadableDate($firstContribDate->created) . " - unix: " . $firstContribDate->created;
     }
+    // /CREATE A FUNCTION WITH THIS RECEIVING TWO DATES.
 
-      $interval = date_diff(date_create(getReadableDate($user->created)), date_create(getReadableDate($comment->created)));   
-      $output = Array(
-        $user->uid,
-        $user->name,
-        $user->status,
-        getReadableDate($user->created),
-        $user->created,
-        getReadableDate($user->changed),
-        $user->login,
-        $comment->cid,
-        $comment->uid,
-        $comment->field_issue_credit_target_id,
-        getReadableDate($comment->created),
-        $comment->created,
-        getReadableDate($comment->changed),
-        $interval->format('%R%a')
+    $output = Array(
+      $user->uid,
+      $node->nid,
+      $user->name,
+      $user->status,
+      getReadableDate($user->created),
+      $user->created,
+      getReadableDate($user->changed),
+      $user->login,
+      $contribDate->cid,
+      $contribDate->uid,
+      getReadableDate($contribDate->created),
+      $contribDate->created,
+      getReadableDate($contribDate->changed),
+      $ttcDate
       );
-      fputcsv($fpMakers, $output); 
+    fputcsv($fpMakers, $output); 
+}
 
-      // We will store just the first contribution.
-      if(empty($firstTimeReg[$user->uid])) {
-        $firstTimeReg[$user->uid] = $user->uid;
-        fputcsv($fpMakersTTF, $output); 
-      }
+//if ($ttcDate!= 0) {
+  echo PHP_EOL . PHP_EOL . PHP_EOL . PHP_EOL . "TTFC ::: TADAAA END:: " . $ttcDate;
+  fputcsv($fpMakersTTF, $output); 
 
-    }
+//}
+
+
 
   }
 
-fclose($fpMakers);
+  fclose($fpMakers);
+  // When used.
+  fclose($fpMakersTTF);
