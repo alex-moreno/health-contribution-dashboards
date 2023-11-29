@@ -199,7 +199,7 @@ $results = $query
 
   $issues = Array();
   //array_push($issues, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size'));
-  fputcsv($fp, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size', 'tags'));
+  fputcsv($fp, Array('Node ID','Title', 'projectID', 'Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size', 'tags'));
 
   $interval = 0;
 
@@ -220,10 +220,10 @@ $results = $query
     else {
       $uniqueAuthors[$result->uid][0] = $result->uid;
       $uniqueAuthors[$result->uid][1] = 1;
-    } 
+    }
 
     if ($verbose) {
-      echo "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: "
+      echo PHP_EOL . "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: "
       . $result->field_issue_status_value . " project ID :: " . $result->field_project_target_id
       . " Author UID: " . $result->uid
       . " CREATED: " . date("d m Y",$result->created)
@@ -303,7 +303,7 @@ $results = $query
 
 
   // Move to array.
-  $output = Array($result->nid,$result->title, $created, $changed, $interval, 
+  $output = Array($result->nid,$result->title, $result->field_project_target_id, $created, $changed, $interval, 
   count($comments), $result->field_issue_status_value, sizeof($numAuthors), $filesize, $tags);
   // Writing to the csv.
   fputcsv($fp, $output);

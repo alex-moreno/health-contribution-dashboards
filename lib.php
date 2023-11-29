@@ -285,7 +285,7 @@ function fetchAllCommentsWithCredits($uid) {
 /*
 * Fetch nodes where user has been credited.
 */
-function fetchAllNodesWithCredits($uid, $limit = 100) {
+function fetchAllNodesWithCredits($uid, $limit = 10000) {
   // SELECT distinct node.nid FROM node  
   $queryComments = db_select('node', 'n');
   $queryComments->fields('n', array('nid', 'uid', 'created', 'changed', 'status'));
