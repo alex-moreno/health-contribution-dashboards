@@ -211,7 +211,7 @@ function fetchResults($query, $status, $datecreated, $datechanged) {
     if(isset($datecreated)) {
       echo "Filtering by date created" . PHP_EOL;
       $my_start_date = date('U', mktime(0, 0, 0, "1", "1", $datecreated));
-      $my_end_date = date('U', mktime(0, 0, 0, "12", "1", $datecreated));
+      $my_end_date = date('U', mktime(0, 0, 0, "12", "31", $datecreated));
   
       $query->condition('created', array($my_start_date, $my_end_date), 'BETWEEN');
     }
@@ -220,7 +220,7 @@ function fetchResults($query, $status, $datecreated, $datechanged) {
       echo "Filtering by date changed/updated" . PHP_EOL;
   
       $changed_start_date = date('U', mktime(0, 0, 0, "1", "1", $datechanged));
-      $changed_end_date = date('U', mktime(0, 0, 0, "12", "1", $datechanged));
+      $changed_end_date = date('U', mktime(0, 0, 0, "12", "31", $datechanged));
   
       $query->condition('changed', array($changed_start_date, $changed_end_date), 'BETWEEN');
     }
@@ -252,7 +252,7 @@ function fetchUsers($query, $datecreated, $datechanged) {
     echo "Filtering by date changed/updated" . PHP_EOL;
 
     $changed_start_date = date('U', mktime(0, 0, 0, "1", "1", $datechanged));
-    $changed_end_date = date('U', mktime(0, 0, 0, "12", "1", $datechanged));
+    $changed_end_date = date('U', mktime(0, 0, 0, "12", "31", $datechanged));
 
     $query->condition('changed', array($changed_start_date, $changed_end_date), 'BETWEEN');
   }
@@ -570,3 +570,20 @@ function findContentsByUser($uid) {
   echo "all nids: ";
   print_r($authorNids);
 }
+
+/*
+1|Active
+13|Needs work
+8|Needs review
+14|Reviewed & tested by the community
+15|Patch (to be ported)
+2|Fixed
+4|Postponed
+16|Postponed (maintainer needs more info)
+3|Closed (duplicate)
+5|Closed (won't fix)
+6|Closed (works as designed)
+18|Closed (cannot reproduce)
+17|Closed (outdated)
+7|Closed (fixed)
+*/

@@ -23,9 +23,9 @@
  */
 // From current folder.
 // Stage.
-define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
+// define('DRUPAL_ROOT', "/var/www/staging.devdrupal.org/htdocs/");
 // Dev.
-//define('DRUPAL_ROOT', "/var/www/dev/alexmor-drupal.dev.devdrupal.org/htdocs/");
+define('DRUPAL_ROOT', "/var/www/dev/alexmor-drupal.dev.devdrupal.org/htdocs/");
 chdir(DRUPAL_ROOT);
 
 define('SMALL_FILE', 1000);
@@ -161,7 +161,7 @@ $results = $query
   if(isset($datecreated)) {
     echo "Filtering by date created" . PHP_EOL;
     $my_start_date = date('U', mktime(0, 0, 0, "1", "1", $datecreated));
-    $my_end_date = date('U', mktime(0, 0, 0, "12", "1", $datecreated));
+    $my_end_date = date('U', mktime(0, 0, 0, "12", "31", $datecreated));
 
     $query->condition('created', array($my_start_date, $my_end_date), 'BETWEEN');
   }
@@ -170,7 +170,7 @@ $results = $query
     echo "Filtering by date changed/updated" . PHP_EOL;
 
     $changed_start_date = date('U', mktime(0, 0, 0, "1", "1", $datechanged));
-    $changed_end_date = date('U', mktime(0, 0, 0, "12", "1", $datechanged));
+    $changed_end_date = date('U', mktime(0, 0, 0, "12", "31", $datechanged));
 
     $query->condition('changed', array($changed_start_date, $changed_end_date), 'BETWEEN');
   }
@@ -191,7 +191,7 @@ $results = $query
 
   if ($verbose) {
     echo "users cvs: " . $fileusers;
-    echo "commenters cvs: " . $filecommenters;
+    echo " -- commenters cvs: " . $filecommenters;
   }
 
   $fpusers = fopen($fileusers, 'w');
@@ -329,10 +329,9 @@ fclose($fpcommenters);
 */
 
 
-function cleanTags($tags) {
+// function cleanTags($tags) {
 
-}
-
+// }
 
 
 /**
@@ -346,6 +345,7 @@ function diffDates($created, $updated) {
 
   return $interval->days;
 }
+
 
 /**
  * Printing a help message.
@@ -428,6 +428,7 @@ function getStatus() {
     }
 
     return $status;
+  }
 }
 
 ?>
