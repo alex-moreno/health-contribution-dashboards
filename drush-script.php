@@ -30,6 +30,8 @@ chdir(DRUPAL_ROOT);
 
 define('SMALL_FILE', 1000);
 
+require_once 'lib.php';
+
 // Fetch command line options.
 $short_options = "hl::f::st:lm:vb:env:dcr:de:dc";
 $long_options = ["help", "filename:", "status:", "limit:", "verbose:", "env:", "datecreated:", "dateend:", "datechanged:"];
@@ -40,6 +42,7 @@ $fileoutput = "";
 if(isset($options["f"]) || isset($options["filename"])) {
   $fileoutput = isset($options["f"]) ? $options["f"] : $options["filename"];
 }
+
 
 if(isset($options["lm"]) || isset($options["limit"])) {
   $limit = isset($options["lm"]) ? $options["lm"] : $options["limit"];
@@ -145,6 +148,10 @@ if ($limit) {
 
 $query->join('field_data_field_issue_status','fis','n.nid = fis.entity_id');
 $query->join('field_data_field_project','fdp','n.nid = fdp.entity_id');
+$query->join('field_data_field_issue_version','fiv','n.nid = fiv.entity_id');
+// $query->join('field_data_field_release_category','frc','n.nid = frc.entity_id');
+
+
 
 if ($verbose) {
   echo "Executing query: ";
@@ -154,9 +161,13 @@ $results = $query
   ->fields('n', array('nid', 'title', 'created', 'changed', 'uid'))
   ->fields('fis', array('field_issue_status_value'))
   ->fields('fdp', array('field_project_target_id'))
+  ->fields('fiv', array('field_issue_version_value'))
+
+
   ->condition('status', 1)
   ->condition('field_issue_status_value', $status)
   ->orderBy('created', 'DESC');
+
 
   if(isset($datecreated)) {
     echo "Filtering by date created" . PHP_EOL;
@@ -199,7 +210,7 @@ $results = $query
 
   $issues = Array();
   //array_push($issues, Array('Node ID','Title','Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size'));
-  fputcsv($fp, Array('Node ID','Title', 'projectID', 'Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size', 'tags'));
+  fputcsv($fp, Array('Node ID','Title', 'projectID', 'Version', 'Core version', 'Created','Updated','Interval (days)','Number comments', 'Status', 'Num. authors', 'Patch size', 'tags'));
 
   $interval = 0;
 
@@ -222,13 +233,50 @@ $results = $query
       $uniqueAuthors[$result->uid][1] = 1;
     }
 
+   if (isDrupalLegacy($result->field_issue_version_value)) {
+    echo "OLD VERSION OF DRUPAL:: " . $result->field_issue_version_value;
+    if($coreVersion == "UNKNOWN") {
+      echo " VERSION ALREADY SET... ERROR!!!";
+    } else {
+      $coreVersion = "legacy";
+    }
+  }
+
+  if (legacyTwoDigits($result->field_issue_version_value)) {
+    echo " :: legacyTwoDigits:: " . $result->field_issue_version_value;
+  }
+
+  if (modernThreeDigits($result->field_issue_version_value)) {
+    echo " :: modernThreeDigits:: " . $result->field_issue_version_value;
+    $coreVersion = "modern";
+  }
+
+  if (legacyDrupalModuleVersion($result->field_issue_version_value)) {
+    echo " :: legacyDrupalModuleVersion:: " . $result->field_issue_version_value;
+    $coreVersion = "legacy";
+  }
+
+  // This overrides the previous legacyModuleVersion.
+  if (legacyDrupalD8Module($result->field_issue_version_value)) {
+    echo " :: legacyDrupalD8Module D8:: " . $result->field_issue_version_value;
+    $coreVersion = "modern";
+  }
+
+   if (isDrupalModern($result->field_issue_version_value)) {
+    echo "DRUPAL 8 OR LATER FOUND isDrupalModern:: " . $result->field_issue_version_value;
+    $coreVersion = "modern";
+   }
+  
     if ($verbose) {
-      echo PHP_EOL . "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: "
+      echo PHP_EOL . PHP_EOL . "NID :: " . $result->nid . " title :: " . $result->title . " - Status :: "
       . $result->field_issue_status_value . " project ID :: " . $result->field_project_target_id
       . " Author UID: " . $result->uid
       . " CREATED: " . date("d m Y",$result->created)
-      . " CHANGED: " . date("d m Y",$result->changed);
+      . " CHANGED: " . date("d m Y",$result->changed)
+      . PHP_EOL . " Version::::" . $result->field_issue_version_value
+      . " Core Version::::" . $coreVersion;
 
+      echo PHP_EOL . PHP_EOL . " ::::::::::::::::" . PHP_EOL;
     }
 
     // Get the tags.
@@ -261,14 +309,6 @@ $results = $query
       // Get current Author.
       $numAuthors[$currentComment->name] = $currentComment->name;
 
-/*      // Store the user as commenter.
-      if (isset($commenters[$currentComment->name])) {
-        $commenters[$currentComment->name]++;
-      }
-      else {
-        $commenters[$currentComment->name] = 1;
-      }
-*/
       // TODO: Get number of authors per issue. if author is not in array, add a new one
       // if patch does not exist, but there is a Gitlab MR, check if there is an API.
       // CHECK THE DIFF: https://git.drupalcode.org/project/entity_jump_menu/-/merge_requests/2.diff
@@ -303,7 +343,7 @@ $results = $query
 
 
   // Move to array.
-  $output = Array($result->nid,$result->title, $result->field_project_target_id, $created, $changed, $interval, 
+  $output = Array($result->nid,$result->title, $result->field_project_target_id, $result->field_issue_version_value, $coreVersion, $created, $changed, $interval, 
   count($comments), $result->field_issue_status_value, sizeof($numAuthors), $filesize, $tags);
   // Writing to the csv.
   fputcsv($fp, $output);
@@ -393,42 +433,6 @@ function print_help_message() {
 /* TODO: CLEANUP */
 function fetch_arguments() {
 
-}
-
-
-
-function getStatus() {
-  if(isset($options["st"]) || isset($options["status"])) {
-    $status = isset($options["st"]) ? $options["st"] : $options["status"];
-  
-    // All active issues
-    if($status == "active") {
-      $status = [1,13,8,14,15,4,16];
-    }
-  
-    // All closed issues
-    if($status == "fixed") {
-      $status = [2,7];
-    }
-  
-    // All closed issues
-    if($status == "closed") {
-      $status = [2,3,5,6,18,17,7];
-    }
-  
-      // All issues
-    if($status == "all") {
-      $status = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
-    }
-  
-    if ($verbose) {
-      echo PHP_EOL;
-      echo "Setting up status: ";
-      print_r($status);  
-    }
-
-    return $status;
-  }
 }
 
 ?>

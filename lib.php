@@ -572,6 +572,70 @@ function findContentsByUser($uid) {
 }
 
 /*
+* 4.x-dev
+*/
+function legacyTwoDigits($input) {
+    $regex = '/^\\d\\.x[-A-Za-z]*$/i';
+
+    return preg_match($regex, $input);
+}
+
+/*
+* 2.x.0-dev
+* 2.0.0-dev
+* 5.1.0-rc1
+*/
+
+function modernThreeDigits($input) {
+  // $regex = '/^\\d[A-Za-z0-9]+\\.[A-Za-z0-9]+\\.\\d-[A-Za-z]+$/i';
+  // $regex = '/^[0-9]+\\.[A-Za-z0-9]+\\.[A-Za-z0-9]+-[A-Za-z]+$/i';
+  $regex = '/^[0-9]+\\.[A-Za-z0-9]+\\.[A-Za-z0-9]+[-A-Za-z0-9]*$/i';
+
+  return preg_match($regex, $input);
+}
+
+
+
+/*
+* Drupal modern == Drupal 7 or older.
+*/
+function isDrupalLegacy($version) {
+    // $regex = '/\\d\\.[A-Za-z0-9]+-[A-Za-z]+/i';
+    $regex = '/^\\d\\.[A-Za-z0-9]+-[A-Za-z]+$/i';
+    return preg_match($regex, $version);
+}
+
+/*
+* Drupal modern == Drupal 7 or older.
+* 6.x-1.x-dev
+* NOT 8.x-4.4
+*/
+function legacyDrupalModuleVersion($version) {
+    $regex = '/^\\d\\.x-\\d\\.x[-A-Za-z0-9]+$/i';
+    return preg_match($regex, $version);
+}
+
+/*
+* Drupal modern == Drupal 7 or older.
+* 8.x-2.x , 8.x-2.1 8.x-2.1-beta
+*/
+function legacyDrupalD8Module($version) {
+  $regex = '/^\\d\\.x-\\d\\.x-[A-Za-z]+$/i';
+  $regex = '/^8\\.x-[0-9]+\\.[A-Za-z0-9]+[-A-Za-z0-9]*$/i';
+          // ^8\.x-[0-9]+\.[A-Za-z0-9]+[-A-Za-z0-9]*$
+  return preg_match($regex, $version);
+}
+
+/*
+* Drupal modern == Drupal 8 or later.
+*/
+function isDrupalModern($version) {
+  $regex = '/^\\d+\\.[A-Za-z0-9]+-[A-Za-z]+$/i';
+  return preg_match($regex, $version);
+}
+
+
+/*
 1|Active
 13|Needs work
 8|Needs review
